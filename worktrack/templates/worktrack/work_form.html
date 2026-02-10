@@ -1,0 +1,14 @@
+{% extends 'worktrack/base.html' %}
+{% block content %}
+
+<div class="card shadow">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn btn-success">Save</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

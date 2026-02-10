@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WorkTrack</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+/* =======================
+   PAGE
+======================= */
+body {
+    background: #f4f5f7;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.kanban-wrapper {
+    padding: 24px;
+}
+
+/* =======================
+   COLUMN
+======================= */
+.kanban-column-wrapper {
+    background: #f4f5f7;
+    border-radius: 8px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.kanban-header {
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #172b4d;
+    border-bottom: 1px solid #dfe1e6;
+}
+
+.kanban-count {
+    font-size: 12px;
+    background: #dfe1e6;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.kanban-column {
+    padding: 10px;
+    min-height: 420px;
+}
+
+/* =======================
+   CARD
+======================= */
+.kanban-card {
+    background: #ffffff;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 2px rgba(9, 30, 66, 0.25);
+    cursor: grab;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+textarea {
+    resize: none;
+    overflow: hidden;
+}
+/* .kanban-card:hover {
+    box-shadow: 0 4px 8px rgba(9, 30, 66, 0.25);
+    transform: translateY(-1px);
+} */
+
+.kanban-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #172b4d;
+    margin-bottom: 4px;
+}
+
+.kanban-card-desc {
+    font-size: 13px;
+    color: #5e6c84;
+    margin-bottom: 8px;
+}
+
+/* =======================
+   CARD FOOTER
+======================= */
+.kanban-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.kanban-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.status-open {
+    background: #e9f2ff;
+    color: #0052cc;
+}
+
+.status-progress {
+    background: #fff7e6;
+    color: #974f0c;
+}
+
+.status-closed {
+    background: #e3fcef;
+    color: #006644;
+}
+
+/* =======================
+   ACTIONS
+======================= */
+.kanban-actions a {
+    font-size: 12px;
+    color: #5e6c84;
+    margin-left: 10px;
+    text-decoration: none;
+}
+
+.kanban-actions a:hover {
+    text-decoration: underline;
+}
+
+.kanban-actions .danger {
+    color: #de350b;
+}
+
+/* =======================
+   EMPTY
+======================= */
+.kanban-empty {
+    font-size: 13px;
+    color: #97a0af;
+    text-align: center;
+    margin-top: 24px;
+}
+
+
+    </style>
+</head>
+
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-dark px-3">
+        <span class="navbar-brand">WorkTrack</span>
+        <a href="{% url 'work_create' %}" class="btn btn-success">+ New Work</a>
+    </nav>
+
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+        
+    <script>
+let draggedCard = null;
+
+/* ================================
+   DRAG START / END
+================================ */
+document.addEventListener("dragstart", (e) => {
+    if (e.target.classList.contains("kanban-card")) {
+        draggedCard = e.target;
+        e.target.classList.add("dragging");
+    }
+});
+
+document.addEventListener("dragend", () => {
+    if (draggedCard) {
+        draggedCard.classList.remove("dragging");
+        draggedCard = null;
+    }
+});
+
+/* ================================
+   DROP + ORDERING
+================================ */
+document.querySelectorAll(".kanban-column").forEach(column => {
+
+    column.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        const afterElement = getDragAfterElement(column, e.clientY);
+        if (afterElement == null) {
+            column.appendChild(draggedCard);
+        } else {
+            column.insertBefore(draggedCard, afterElement);
+        }
+    });
+
+    column.addEventListener("drop", () => {
+        if (!draggedCard) return;
+
+        const newState = column.dataset.state;
+        const statusId = draggedCard.dataset.statusId;
+        const newPosition = [...column.children].indexOf(draggedCard);
+
+        updateCounts();
+        updateEmptyStates();
+        updateCardBadge(draggedCard, newState);
+
+        fetch("/update-status/", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": getCookie("csrftoken"),
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                status_id: statusId,
+                state: newState,
+                position: newPosition,
+            }),
+        });
+    });
+});
+
+/* ================================
+   ORDER HELPER
+================================ */
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll(".kanban-card:not(.dragging)")];
+
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+
+        if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+        }
+        return closest;
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+    /* ================================
+    UI HELPERS
+    ================================ */
+    function updateCounts() {
+        document.querySelectorAll(".kanban-column-wrapper").forEach(wrapper => {
+            const count = wrapper.querySelectorAll(".kanban-card").length;
+            wrapper.querySelector(".kanban-count").innerText = count;
+        });
+    }
+
+    function updateEmptyStates() {
+        document.querySelectorAll(".kanban-column").forEach(column => {
+            const cards = column.querySelectorAll(".kanban-card");
+            let empty = column.querySelector(".kanban-empty");
+
+            if (cards.length === 0) {
+                if (!empty) {
+                    empty = document.createElement("div");
+                    empty.className = "kanban-empty";
+                    empty.innerText = "No work items";
+                    column.appendChild(empty);
+                }
+            } else {
+                if (empty) empty.remove();
+            }
+        });
+    }
+
+    function updateCardBadge(card, state) {
+        const badge = card.querySelector(".badge");
+
+        const stateMap = {
+            OPEN: { text: "Open", cls: "bg-primary" },
+            IN_PROGRESS: { text: "In Progress", cls: "bg-warning" },
+            CLOSED: { text: "Closed", cls: "bg-success" }
+        };
+
+        badge.textContent = stateMap[state].text;
+        badge.className = "badge " + stateMap[state].cls;
+    }
+
+    /* ================================
+    CSRF TOKEN
+    ================================ */
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie) {
+            document.cookie.split(";").forEach(cookie => {
+                const c = cookie.trim();
+                if (c.startsWith(name + "=")) {
+                    cookieValue = decodeURIComponent(c.substring(name.length + 1));
+                }
+            });
+        }
+        return cookieValue;
+    }
+
+    /* ================================
+    INITIAL SYNC
+    ================================ */
+    document.addEventListener("DOMContentLoaded", () => {
+        updateCounts();
+        updateEmptyStates();
+    });
+    </script>
+
+    <!-- JavaScript (auto height) -->
+    <script>
+    document.querySelectorAll('textarea').forEach(textarea => {
+        textarea.addEventListener('input', () => {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        });
+    });
+    </script>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+
+
+</body>
+</html>

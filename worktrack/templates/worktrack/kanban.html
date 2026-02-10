@@ -1,0 +1,73 @@
+{% extends "worktrack/base.html" %}
+{% block content %}
+
+<div class="kanban-wrapper">
+
+    <div class="row g-3">
+
+        {% for column in columns %}
+        <div class="col-md-4">
+
+            <div class="kanban-column-wrapper">
+
+                <!-- Column Header -->
+                <div class="kanban-header">
+                    <span class="kanban-title">{{ column.title }}</span>
+                    <span class="kanban-count">{{ column.items|length }}</span>
+                </div>
+
+                <!-- Drop Area -->
+                <div class="kanban-column"
+                     data-state="{{ column.key }}">
+
+                    {% for status in column.items %}
+                    <div class="kanban-card"
+                         draggable="true"
+                         data-status-id="{{ status.id }}">
+
+                        <div class="kanban-card-title">
+                            {{ status.work.title }}
+                        </div>
+
+                        {% if status.work.description %}
+                        <div class="kanban-card-desc">
+                            {{ status.work.description|truncatechars:80 }}
+                        </div>
+                        {% endif %}
+
+                        <div class="kanban-card-footer">
+                            <span class="badge
+                                {% if column.key == 'OPEN' %} bg-primary
+                                {% elif column.key == 'IN_PROGRESS' %} bg-warning
+                                {% else %} bg-success
+                                {% endif %}">
+                                {{ column.title }}
+                            </span>
+                            <div class="kanban-actions">
+                                <a href="{% url 'work_update' status.work.id %}"
+                                class="text-muted small me-2">Edit</a>
+
+                                <a href="{% url 'work_delete' status.work.id %}"
+                                class="text-danger small"
+                                onclick="return confirm('Delete this work?');">
+                                Delete
+                                </a>
+                            </div>
+                        </div>
+
+                    </div>
+                    {% empty %}
+                        <div class="kanban-empty">No work items</div>
+                    {% endfor %}
+
+                </div>
+
+            </div>
+        </div>
+        {% endfor %}
+
+    </div>
+
+</div>
+
+{% endblock %}
